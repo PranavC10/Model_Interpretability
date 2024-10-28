@@ -3,20 +3,32 @@ import pandas as pd
 from openpyxl import Workbook
 
 def generate_shap_excel(model, X, excel_filename='shap_results.xlsx'):
-    # Initialize SHAP explainer
+    """
+    Generates an Excel file with features, model predictions, 
+    top 3 and lowest 3 feature contributions per row.
+
+    Parameters:
+    - model: Trained model object (e.g., RandomForestClassifier)
+    - X: Feature dataset (Pandas DataFrame)
+    - excel_filename: Output Excel filename (default 'shap_results.xlsx')
+
+    Returns:
+    - Path to the generated Excel file
+    """
+    # Initialize SHAP explainer and calculate SHAP values
     explainer = shap.TreeExplainer(model)
-    shap_values = explainer.shap_values(X)  # Get SHAP values for all rows
+    shap_values = explainer.shap_values(X)
 
     # Create an Excel workbook and sheet
     wb = Workbook()
     ws = wb.active
     ws.title = "SHAP Analysis"
 
-    # Add header to the Excel sheet
+    # Add headers to the Excel sheet
     headers = list(X.columns) + ['Prediction', 'Top 3 Features', 'Lowest 3 Features']
     ws.append(headers)
 
-    # Loop over each row in the dataset
+    # Loop through each row in the dataset
     for idx, row in X.iterrows():
         # Convert the row to a list of values
         row_data = row.tolist()
@@ -28,8 +40,8 @@ def generate_shap_excel(model, X, excel_filename='shap_results.xlsx'):
         sorted_contributions = sorted(
             zip(X.columns, shap_row_values), key=lambda x: abs(x[1]), reverse=True
         )
-        top_3 = ', '.join([f"{feat}: {round(val, 2)}" for feat, val in sorted_contributions[:3]])
-        lowest_3 = ', '.join([f"{feat}: {round(val, 2)}" for feat, val in sorted_contributions[-3:]])
+        top_3 = ', '.join([f"{feat}={round(val, 2)}" for feat, val in sorted_contributions[:3]])
+        lowest_3 = ', '.join([f"{feat}={round(val, 2)}" for feat, val in sorted_contributions[-3:]])
 
         # Predict the outcome for the row
         prediction = model.predict([row])[0]
@@ -45,5 +57,5 @@ def generate_shap_excel(model, X, excel_filename='shap_results.xlsx'):
     print(f"Excel file saved: {excel_filename}")
 
 # Example usage:
-# Assuming 'rf_model' is your trained RandomForest model and 'X_test' is your feature dataset
+# Assuming 'rf_model' is your trained Random Forest model and 'X_test' is your feature dataset
 # generate_shap_excel(rf_model, X_test)

@@ -1,3 +1,4 @@
+import os
 import json
 import pandas as pd
 
@@ -31,10 +32,10 @@ def update_processed_lines(line_number):
     with open(PROCESSED_LINES_LOG, 'w') as f:
         f.write(f"{line_number}\n")
 
-# Check for exact phrase match of customer name in news body
-def search_customer_in_news(customer_name, news_body):
-    """Check if customer_name appears as an exact phrase in news_body."""
-    return customer_name in news_body
+# Check for exact phrase match of customer name in cleaned_body
+def search_customer_in_news(customer_name, cleaned_body):
+    """Check if customer_name appears as an exact phrase in cleaned_body."""
+    return customer_name in cleaned_body
 
 # Process the JSONL file line by line
 def process_jsonl_file():
@@ -49,7 +50,7 @@ def process_jsonl_file():
 
             # Load the JSON object from the line
             news = json.loads(line.strip())
-            news_body = normalize_text(news.get('body', ''))
+            cleaned_body = normalize_text(news.get('cleaned_body', ''))
             matches = []
             
             # Iterate through each customer to check for an exact phrase match
@@ -57,19 +58,13 @@ def process_jsonl_file():
                 customer_id = customer['customer_id']
                 customer_name = normalize_text(customer['customer_name'])
                 
-                # Check for exact phrase match in the news body
-                if search_customer_in_news(customer_name, news_body):
-                    # Prepare the matched data as a JSON object
+                # Check for exact phrase match in the cleaned_body
+                if search_customer_in_news(customer_name, cleaned_body):
+                    # Prepare the matched data by including all fields from the JSON object
                     match = {
+                        **news,  # Include all fields from the JSON object
                         'customer_id': customer_id,
-                        'customer_name': customer_name,
-                        'news_id': news.get('newsReferenceId'),  # Adjust ID field if needed
-                        'title': news.get('title', ''),
-                        'body': news_body,
-                        'published_date': news.get('newsPublishedDate', ''),  # Add published date
-                        'source': news.get('source', ''),  # Add source if available
-                        'sentiment': news.get('sentiment', ''),  # Add sentiment if available
-                        # Add any other fields from the JSON as needed
+                        'customer_name': customer['customer_name']
                     }
                     # Write each matched result as a single line in JSONL format
                     output_file.write(json.dumps(match) + '\n')

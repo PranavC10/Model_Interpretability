@@ -12,7 +12,7 @@ df_customers = pd.DataFrame({
 
 # Set up paths
 NEWS_FOLDER_PATH = 'path_to_your_json_files'  # Folder with news JSON files
-OUTPUT_FILE = 'identified.csv'  # Output file for matches
+OUTPUT_FILE = 'identified.jsonl'  # Output file for matches in JSONL format
 PROCESSED_FILES_LOG = 'processed_files.log'  # Log file to track processed files
 
 # Function to normalize text (lowercase and strip)
@@ -40,38 +40,36 @@ def search_customer_in_news(customer_name, news_body):
 
 # Process a single JSON file to search for customer names in news bodies
 def process_json_file(file_path):
-    """Process a single JSON file and append matches to output CSV."""
+    """Process a single JSON file and append matches to output JSONL file."""
     with open(file_path, 'r') as f:
         data = json.load(f)  # Load JSON array
 
         # Iterate through each news item in JSON file
-        matches = []
-        for news in data:
-            # Normalize news body for exact match comparison
-            news_body = normalize_text(news.get('body', ''))
-            
-            for _, customer in df_customers.iterrows():
-                customer_id = customer['customer_id']
-                customer_name = normalize_text(customer['customer_name'])
+        with open(OUTPUT_FILE, 'a') as output_file:  # Open output file in append mode
+            for news in data:
+                # Normalize news body for exact match comparison
+                news_body = normalize_text(news.get('body', ''))
                 
-                # Check for exact match
-                if search_customer_in_news(customer_name, news_body):
-                    # Collect all necessary fields including 'published date'
-                    matches.append({
-                        'customer_id': customer_id,
-                        'customer_name': customer_name,
-                        'news_id': news.get('newsReferenceId'),  # Adjust ID field if needed
-                        'title': news.get('title', ''),
-                        'body': news_body,
-                        'published_date': news.get('newsPublishedDate', ''),  # Add published date
-                        'source': news.get('source', ''),  # Add source if available
-                        'sentiment': news.get('sentiment', ''),  # Add sentiment if available
-                        # Add any other fields from the JSON as needed
-                    })
-
-        # Append matches to output CSV
-        if matches:
-            pd.DataFrame(matches).to_csv(OUTPUT_FILE, mode='a', header=not os.path.exists(OUTPUT_FILE), index=False)
+                for _, customer in df_customers.iterrows():
+                    customer_id = customer['customer_id']
+                    customer_name = normalize_text(customer['customer_name'])
+                    
+                    # Check for exact match
+                    if search_customer_in_news(customer_name, news_body):
+                        # Prepare the matched data as a JSON object
+                        match = {
+                            'customer_id': customer_id,
+                            'customer_name': customer_name,
+                            'news_id': news.get('newsReferenceId'),  # Adjust ID field if needed
+                            'title': news.get('title', ''),
+                            'body': news_body,
+                            'published_date': news.get('newsPublishedDate', ''),  # Add published date
+                            'source': news.get('source', ''),  # Add source if available
+                            'sentiment': news.get('sentiment', ''),  # Add sentiment if available
+                            # Add any other fields from the JSON as needed
+                        }
+                        # Write each matched result as a single line in JSONL format
+                        output_file.write(json.dumps(match) + '\n')
 
 def main():
     # Load previously processed files
@@ -84,7 +82,7 @@ def main():
         file_path = os.path.join(NEWS_FOLDER_PATH, file_name)
         
         try:
-            # Process file and append to CSV if matches are found
+            # Process file and append to JSONL if matches are found
             process_json_file(file_path)
             append_to_log(file_name)  # Log file as processed after successful processing
         except Exception as e:

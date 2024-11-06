@@ -46,25 +46,28 @@ def filter_news_object(obj):
     
     # Keep original and cleaned body along with other necessary columns
     return {
-        'id': obj.get('id', None),
+        'id': obj.get('newsReferenceId', None),  # Adjust based on available ID field
         'original_body': original_body,
         'cleaned_body': cleaned_body,
-        # Add other necessary columns as needed
+        # Add other necessary fields if needed
     }
 
 def process_json_file(file_path):
     """Process a single JSON file, filter objects, and append results to output file."""
+    records_written = 0
     with open(file_path, 'r') as f:
-        for line in f:
-            try:
-                obj = json.loads(line.strip())
+        try:
+            data = json.load(f)  # Load the entire file as a JSON array
+            for obj in data:
                 filtered_obj = filter_news_object(obj)
                 if filtered_obj:
                     with open(OUTPUT_FILE, 'a') as output_file:
                         output_file.write(json.dumps(filtered_obj) + '\n')
-            except json.JSONDecodeError:
-                print(f"Skipping invalid JSON line in {file_path}")
-                continue
+                    records_written += 1  # Increment count of records written
+        except json.JSONDecodeError:
+            print(f"Skipping invalid JSON file: {file_path}")
+    print(f"Processed {file_path}: {records_written} records written")  # Debugging output
+    return records_written > 0
 
 def main():
     folder_path = 'path_to_your_json_files'  # Update to your JSON folder path
@@ -76,8 +79,8 @@ def main():
         file_path = os.path.join(folder_path, file_name)
         
         try:
-            process_json_file(file_path)
-            append_to_log(file_name)  # Log file as processed
+            if process_json_file(file_path):
+                append_to_log(file_name)  # Log file as processed only if records were written
         except Exception as e:
             print(f"Error processing {file_name}: {e}")
             break  # Stop processing on error to avoid partial file corruption

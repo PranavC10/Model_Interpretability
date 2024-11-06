@@ -1,8 +1,6 @@
 import os
 import json
-import re
 from tqdm import tqdm
-import pandas as pd
 from nltk.corpus import stopwords
 from nltk.tokenize import word_tokenize
 
@@ -30,7 +28,7 @@ def append_to_log(file_name):
 
 def clean_text(text):
     """Remove stopwords from text and return cleaned text."""
-    words = word_tokenize(text.lower())
+    words = word_tokenize(text.lower())  # Lowercase entire text
     cleaned_words = [word for word in words if word.isalnum() and word not in STOPWORDS]
     return " ".join(cleaned_words)
 
@@ -39,16 +37,18 @@ def filter_news_object(obj):
     if 'body' not in obj:
         return None  # Discard objects without a 'body'
     
-    cleaned_body = clean_text(obj['body'])
+    original_body = obj['body'].lower()  # Lowercase the original body text
+    cleaned_body = clean_text(original_body)
     word_count = len(cleaned_body.split())
     
     if word_count < MIN_WORD_COUNT:
         return None  # Discard objects with fewer than MIN_WORD_COUNT words
     
-    # Keep selected columns and cleaned body
+    # Keep original and cleaned body along with other necessary columns
     return {
         'id': obj.get('id', None),
-        'body': cleaned_body,
+        'original_body': original_body,
+        'cleaned_body': cleaned_body,
         # Add other necessary columns as needed
     }
 

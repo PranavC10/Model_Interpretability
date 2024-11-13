@@ -1,0 +1,42 @@
+import pandas as pd
+import time  # Simulating a time-consuming function
+from tqdm import tqdm
+import os
+
+# Sample data and function
+df = pd.DataFrame({'input_column': range(1, 1001)})  # Adjust for actual data
+def some_function(value):
+    # Simulate a processing function, replace with actual function
+    time.sleep(0.01)  # Replace with your actual processing
+    return value * 2
+
+# Log file to keep track of the progress
+log_file = 'progress_log.txt'
+output_file = 'processed_data.csv'
+
+# Find the last completed row from the log file
+if os.path.exists(log_file):
+    with open(log_file, 'r') as f:
+        # Get the last processed index from the log file
+        lines = f.readlines()
+        start_index = int(lines[-1].strip()) + 1 if lines else 0
+else:
+    start_index = 0  # Start from the beginning if no log file is found
+
+# Initialize the output CSV file with headers if it doesn't exist
+if not os.path.exists(output_file):
+    with open(output_file, 'w') as f:
+        f.write('input_column,prediction\n')
+
+# Iterate with a progress bar, starting from the last processed index
+for index in tqdm(range(start_index, len(df)), initial=start_index, total=len(df)):
+    input_value = df.at[index, 'input_column']
+    prediction = some_function(input_value)
+
+    # Append the processed row to the output CSV file
+    with open(output_file, 'a') as f:
+        f.write(f"{input_value},{prediction}\n")
+
+    # Append the index to the log file after processing each row
+    with open(log_file, 'a') as f:
+        f.write(f"{index}\n")

@@ -25,17 +25,18 @@ else:
 
 # Initialize the output CSV file with headers if it doesn't exist
 if not os.path.exists(output_file):
-    with open(output_file, 'w') as f:
-        f.write('input_column,prediction\n')
+    # Create a new DataFrame with the same columns as `df` plus `prediction`
+    df.iloc[[0]].assign(prediction=None).to_csv(output_file, index=False)
 
 # Iterate with a progress bar, starting from the last processed index
 for index in tqdm(range(start_index, len(df)), initial=start_index, total=len(df)):
-    input_value = df.at[index, 'input_column']
-    prediction = some_function(input_value)
+    row = df.iloc[index]
+    prediction = some_function(row['input_column'])
 
-    # Append the processed row to the output CSV file
-    with open(output_file, 'a') as f:
-        f.write(f"{input_value},{prediction}\n")
+    # Add the prediction to the row and save it to the output CSV
+    row_with_prediction = row.to_frame().T  # Convert Series to DataFrame for easier appending
+    row_with_prediction['prediction'] = prediction
+    row_with_prediction.to_csv(output_file, mode='a', header=False, index=False)
 
     # Append the index to the log file after processing each row
     with open(log_file, 'a') as f:

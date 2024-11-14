@@ -1,46 +1,68 @@
 import torch
-from transformers import pipeline, LongformerTokenizer, LongformerForSequenceClassification
+from transformers import pipeline, DistilBertTokenizer, DistilBertForSequenceClassification
 import pandas as pd
-import gc  # For garbage collection to free memory
+import gc
+from tqdm import tqdm
 
 # Load your DataFrame (replace with your actual DataFrame)
 # Assuming the DataFrame has a column 'original_body'
 df = pd.DataFrame({'original_body': ["Your large text data goes here..."] * 100})  # Example data with 100 entries
 
-# Load Longformer model and tokenizer with GPU support
-tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
-model = LongformerForSequenceClassification.from_pretrained("allenai/longformer-base-4096")
-device = 0 if torch.cuda.is_available() else -1  # Use GPU if available
+# Load DistilBERT model and tokenizer with GPU support
+tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
 
-# Initialize the sentiment-analysis pipeline
-sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=device)
+# Try to use GPU if available, otherwise fall back to CPU
+device = 0 if torch.cuda.is_available() else -1
 
-# Batch processing to manage GPU memory
-batch_size = 8  # Adjust batch size based on GPU memory capacity
-results = []
+# Initialize the sentiment-analysis pipeline with return_all_scores=True
+sentiment_pipeline = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer, device=device, return_all_scores=True)
 
-for i in range(0, len(df), batch_size):
-    # Select batch, ensuring it doesn’t exceed the DataFrame length
-    batch_texts = df['original_body'].iloc[i:i + batch_size].tolist()
+# Function to calculate negative probability for large text by chunking
+def get_negative_probability(text, chunk_size=512):
+    tokens = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=chunk_size)
+    input_ids = tokens["input_ids"][0]
+    num_chunks = len(input_ids) // chunk_size + (1 if len(input_ids) % chunk_size > 0 else 0)
 
-    # Run sentiment analysis on the batch
-    try:
-        batch_results = sentiment_pipeline(batch_texts)
-    except Exception as e:
-        print(f"Error processing batch starting at index {i}: {e}")
-        batch_results = [{"label": "Error"} for _ in batch_texts]  # Assign "Error" if there’s a failure
+    negative_probs = []
+    for i in range(num_chunks):
+        chunk_text = tokenizer.decode(input_ids[i * chunk_size: (i + 1) * chunk_size], skip_special_tokens=True)
 
-    # Extract labels and append to results list
-    results.extend([result['label'] for result in batch_results])
+        # Attempt to run on GPU, fallback to CPU in case of memory errors
+        try:
+            result = sentiment_pipeline(chunk_text)
+        except RuntimeError as e:
+            if 'out of memory' in str(e):
+                print("Out of memory error encountered. Switching to CPU for this chunk.")
+                # Clear GPU cache
+                torch.cuda.empty_cache()
+                gc.collect()
+                
+                # Switch to CPU for this pipeline instance
+                sentiment_pipeline_cpu = pipeline(
+                    "sentiment-analysis", model=model, tokenizer=tokenizer, device=-1, return_all_scores=True
+                )
+                result = sentiment_pipeline_cpu(chunk_text)
+            else:
+                raise e  # Re-raise if it's a different error
 
-    # Clear GPU cache to free memory
-    torch.cuda.empty_cache()
-    gc.collect()
+        # Extract the probability for "NEGATIVE"
+        neg_prob = next(item['score'] for item in result[0] if item['label'] == "NEGATIVE")
+        negative_probs.append(neg_prob)
 
-# Ensure results length matches the DataFrame length (handle any discrepancies gracefully)
-df['sentiment'] = results[:len(df)]  # Slicing results in case of length mismatch
+        # Clear GPU cache after processing each chunk
+        torch.cuda.empty_cache()
+        gc.collect()
+
+    # Return the average negative probability across all chunks
+    return sum(negative_probs) / len(negative_probs) if negative_probs else 0
+
+# Process each row with a progress bar and save the negative probability in a new column
+df['neg_probability'] = [
+    get_negative_probability(text) for text in tqdm(df['original_body'], desc="Calculating Negative Probabilities")
+]
 
 # Save the updated DataFrame to a CSV
-df.to_csv("sentiment_output.csv", index=False)
+df.to_csv("sentiment_output_with_neg_probability.csv", index=False)
 
-print("Sentiment analysis completed and saved.")
+print("Negative probability analysis completed and saved.")
